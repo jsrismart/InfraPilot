@@ -1,0 +1,130 @@
+<svg width="1400" height="760" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <style>
+      .tier-label { font-size: 16px; font-weight: bold; fill: white; }
+      .resource-box { stroke-width: 2; rx: 6; }
+      .resource-icon { font-size: 28px; }
+      .resource-name { font-size: 12px; font-weight: bold; fill: white; }
+      .resource-type { font-size: 10px; fill: white; opacity: 0.8; }
+      .diagram-title { font-size: 24px; font-weight: bold; fill: #232F3E; }
+      .connection { stroke: #232F3E; stroke-width: 2; fill: none; stroke-dasharray: 5,5; }
+      .tier-bg { stroke: #232F3E; stroke-width: 1; fill: none; stroke-dasharray: 3,3; }
+    </style>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="3" dy="3" stdDeviation="4" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Title -->
+  <text x="700" y="35" class="diagram-title" text-anchor="middle">AWS Infrastructure Architecture</text>
+  <!-- Internet Tier -->
+  <rect x="20" y="70" width="1200" height="160" class="tier-bg" stroke="#FF9800" stroke-width="2"/>
+  
+  <!-- Tier Label -->
+  <rect x="20" y="70" width="160" height="30" fill="#FF9800" rx="4"/>
+  <text x="100" y="90" class="tier-label" text-anchor="middle">Internet</text>
+  <g filter="url(#shadow)">
+    <rect x="200" y="95" width="140" height="110" class="resource-box" fill="#FF9800" stroke="#232F3E" opacity="0.9"/>
+    <text x="270.0" y="115" class="resource-icon" text-anchor="middle">🚪</text>
+    <text x="270.0" y="150" class="resource-name" text-anchor="middle">main</text>
+    <text x="270.0" y="168" class="resource-type" text-anchor="middle">internet_gat</text>
+  </g>
+  <!-- Compute Tier -->
+  <rect x="20" y="245" width="1200" height="160" class="tier-bg" stroke="#4CAF50" stroke-width="2"/>
+  
+  <!-- Tier Label -->
+  <rect x="20" y="245" width="160" height="30" fill="#4CAF50" rx="4"/>
+  <text x="100" y="265" class="tier-label" text-anchor="middle">Compute</text>
+  <g filter="url(#shadow)">
+    <rect x="200" y="270" width="140" height="110" class="resource-box" fill="#4CAF50" stroke="#232F3E" opacity="0.9"/>
+    <text x="270.0" y="290" class="resource-icon" text-anchor="middle">🖥️</text>
+    <text x="270.0" y="325" class="resource-name" text-anchor="middle">web_server</text>
+    <text x="270.0" y="343" class="resource-type" text-anchor="middle">instance</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="355" y="270" width="140" height="110" class="resource-box" fill="#4CAF50" stroke="#232F3E" opacity="0.9"/>
+    <text x="425.0" y="290" class="resource-icon" text-anchor="middle">🖥️</text>
+    <text x="425.0" y="325" class="resource-name" text-anchor="middle">web_server</text>
+    <text x="425.0" y="343" class="resource-type" text-anchor="middle">instance</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="510" y="270" width="140" height="110" class="resource-box" fill="#4CAF50" stroke="#232F3E" opacity="0.9"/>
+    <text x="580.0" y="290" class="resource-icon" text-anchor="middle">λ</text>
+    <text x="580.0" y="325" class="resource-name" text-anchor="middle">api_functi</text>
+    <text x="580.0" y="343" class="resource-type" text-anchor="middle">lambda_funct</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="665" y="270" width="140" height="110" class="resource-box" fill="#4CAF50" stroke="#232F3E" opacity="0.9"/>
+    <text x="735.0" y="290" class="resource-icon" text-anchor="middle">🖥️</text>
+    <text x="735.0" y="325" class="resource-name" text-anchor="middle">main_db</text>
+    <text x="735.0" y="343" class="resource-type" text-anchor="middle">db_instance</text>
+  </g>
+  <!-- Storage Tier -->
+  <rect x="20" y="420" width="1200" height="160" class="tier-bg" stroke="#FF5722" stroke-width="2"/>
+  
+  <!-- Tier Label -->
+  <rect x="20" y="420" width="160" height="30" fill="#FF5722" rx="4"/>
+  <text x="100" y="440" class="tier-label" text-anchor="middle">Storage</text>
+  <g filter="url(#shadow)">
+    <rect x="200" y="445" width="140" height="110" class="resource-box" fill="#FF5722" stroke="#232F3E" opacity="0.9"/>
+    <text x="270.0" y="465" class="resource-icon" text-anchor="middle">📦</text>
+    <text x="270.0" y="500" class="resource-name" text-anchor="middle">app_bucket</text>
+    <text x="270.0" y="518" class="resource-type" text-anchor="middle">s3_bucket</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="355" y="445" width="140" height="110" class="resource-box" fill="#FF5722" stroke="#232F3E" opacity="0.9"/>
+    <text x="425.0" y="465" class="resource-icon" text-anchor="middle">📦</text>
+    <text x="425.0" y="500" class="resource-name" text-anchor="middle">logs_bucke</text>
+    <text x="425.0" y="518" class="resource-type" text-anchor="middle">s3_bucket</text>
+  </g>
+  <!-- Network Tier -->
+  <rect x="20" y="595" width="1200" height="160" class="tier-bg" stroke="#00BCD4" stroke-width="2"/>
+  
+  <!-- Tier Label -->
+  <rect x="20" y="595" width="160" height="30" fill="#00BCD4" rx="4"/>
+  <text x="100" y="615" class="tier-label" text-anchor="middle">Network</text>
+  <g filter="url(#shadow)">
+    <rect x="200" y="620" width="140" height="110" class="resource-box" fill="#00BCD4" stroke="#232F3E" opacity="0.9"/>
+    <text x="270.0" y="640" class="resource-icon" text-anchor="middle">🌐</text>
+    <text x="270.0" y="675" class="resource-name" text-anchor="middle">main</text>
+    <text x="270.0" y="693" class="resource-type" text-anchor="middle">vpc</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="355" y="620" width="140" height="110" class="resource-box" fill="#00BCD4" stroke="#232F3E" opacity="0.9"/>
+    <text x="425.0" y="640" class="resource-icon" text-anchor="middle">🔗</text>
+    <text x="425.0" y="675" class="resource-name" text-anchor="middle">web_subnet</text>
+    <text x="425.0" y="693" class="resource-type" text-anchor="middle">subnet</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="510" y="620" width="140" height="110" class="resource-box" fill="#00BCD4" stroke="#232F3E" opacity="0.9"/>
+    <text x="580.0" y="640" class="resource-icon" text-anchor="middle">🔗</text>
+    <text x="580.0" y="675" class="resource-name" text-anchor="middle">app_subnet</text>
+    <text x="580.0" y="693" class="resource-type" text-anchor="middle">subnet</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="665" y="620" width="140" height="110" class="resource-box" fill="#00BCD4" stroke="#232F3E" opacity="0.9"/>
+    <text x="735.0" y="640" class="resource-icon" text-anchor="middle">🔗</text>
+    <text x="735.0" y="675" class="resource-name" text-anchor="middle">db_subnet_</text>
+    <text x="735.0" y="693" class="resource-type" text-anchor="middle">subnet</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="820" y="620" width="140" height="110" class="resource-box" fill="#00BCD4" stroke="#232F3E" opacity="0.9"/>
+    <text x="890.0" y="640" class="resource-icon" text-anchor="middle">⚙️</text>
+    <text x="890.0" y="675" class="resource-name" text-anchor="middle">web_alb</text>
+    <text x="890.0" y="693" class="resource-type" text-anchor="middle">lb</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="975" y="620" width="140" height="110" class="resource-box" fill="#00BCD4" stroke="#232F3E" opacity="0.9"/>
+    <text x="1045.0" y="640" class="resource-icon" text-anchor="middle">👤</text>
+    <text x="1045.0" y="675" class="resource-name" text-anchor="middle">lambda_rol</text>
+    <text x="1045.0" y="693" class="resource-type" text-anchor="middle">iam_role</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1130" y="620" width="140" height="110" class="resource-box" fill="#00BCD4" stroke="#232F3E" opacity="0.9"/>
+    <text x="1200.0" y="640" class="resource-icon" text-anchor="middle">🔒</text>
+    <text x="1200.0" y="675" class="resource-name" text-anchor="middle">web_sg</text>
+    <text x="1200.0" y="693" class="resource-type" text-anchor="middle">security_gro</text>
+  </g>
+  <!-- Legend -->
+  <text x="20" y="790" style="font-size: 14px; font-weight: bold; fill: #333;">Professional Infrastructure Architecture Diagram</text>
+</svg>
