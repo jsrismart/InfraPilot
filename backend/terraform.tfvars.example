@@ -1,0 +1,24 @@
+# Terraform Variables Example
+# Rename this file to terraform.tfvars and update with your actual values
+# This file is NOT tracked by git for security
+
+vm_name            = "production-vm"
+resource_group_name = "production-rg"
+admin_username     = "azureuser"
+
+# Restrict SSH/RDP access to specific IP addresses (recommended for security)
+# Use CIDR notation. Examples:
+# - Single IP: "203.0.113.10/32"
+# - Corporate network: "203.0.113.0/24"
+# - Multiple IPs: ["203.0.113.10/32", "203.0.113.20/32"]
+allowed_admin_ips = ["0.0.0.0/0"]  # WARNING: Allows access from anywhere. Change to your IP!
+
+# IMPORTANT: Set admin_password via environment variable instead:
+# PowerShell: $env:TF_VAR_admin_password = "YourSecurePassword123!"
+# Bash: export TF_VAR_admin_password="YourSecurePassword123!"
+# 
+# Password requirements:
+# - Minimum 8 characters
+# - At least one uppercase letter
+# - At least one number
+
