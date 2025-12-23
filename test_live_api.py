@@ -5,7 +5,7 @@ prompt = 'Create a azure vm with B series at South India region'
 print(f'Testing: {prompt}\n')
 
 response = requests.post(
-    'http://127.0.0.1:8001/api/v1/infra/generate-iac',
+    'http://127.0.0.1:8000/api/v1/infra/generate-iac',
     json={'prompt': prompt},
     timeout=60
 )

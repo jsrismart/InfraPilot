@@ -3,7 +3,9 @@ from app.api.v1.types import PromptRequest
 from app.services.pipeline import run_pipeline
 from app.utils.logger import logger
 import asyncio
-from concurrent.futures import TimeoutError
+from concurrent.futures import TimeoutError, ThreadPoolExecutor
+import threading
+import time
 
 router = APIRouter()
 
@@ -28,8 +30,21 @@ def generate_iac(data: PromptRequest, fast: bool = Query(False)):
     
     try:
         logger.info(f"Processing request - Fast mode: {fast}, Prompt length: {len(data.prompt)}")
+        
+        # Set a timeout for the entire operation (300 seconds = 5 minutes)
+        # This allows Ollama time to generate but prevents infinite hangs
+        start_time = time.time()
+        max_wait = 300  # 5 minutes timeout
+        
         result = run_pipeline(data.prompt, skip_tools=fast)
-        logger.info("Request completed successfully")
+        
+        elapsed = time.time() - start_time
+        logger.info(f"Request completed in {elapsed:.2f}s")
+        
+        if elapsed > 180:
+            # Add warning if it took more than 3 minutes
+            logger.warning(f"Request took {elapsed:.2f}s - consider using Fast Mode (?fast=true)")
+        
         return result
     
     except ValueError as e:

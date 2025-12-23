@@ -231,6 +231,26 @@ class AWSPricingFetcher:
 class AzurePricingFetcher:
     """Fetch real-time pricing from Azure Pricing API (direct from Azure Calculator)"""
     
+    # VM series fallback mapping for unavailable SKUs (C-series doesn't exist in Azure API)
+    VM_SERIES_FALLBACK = {
+        # C-series fallbacks (not available in Azure API)
+        'Standard_C2s_v3': 'Standard_D2s_v3',    # C2s_v3 → D2s_v3
+        'Standard_C4s_v3': 'Standard_D4s_v3',    # C4s_v3 → D4s_v3
+        'Standard_C4c_v3': 'Standard_D4s_v3',    # C4c_v3 → D4s_v3
+        'Standard_C8s_v3': 'Standard_D8s_v3',    # C8s_v3 → D8s_v3
+        'Standard_C16s_v3': 'Standard_D16s_v3', # C16s_v3 → D16s_v3
+        'Standard_C2_v3': 'Standard_D2s_v3',
+        'Standard_C4_v3': 'Standard_D4s_v3',
+        'Standard_C8_v3': 'Standard_D8s_v3',
+        # B-series fallbacks (burstable, not in standard pricing, fallback to D-series)
+        'Standard_B1s': 'Standard_D1s_v3',       # B1s → D1s_v3
+        'Standard_B1ms': 'Standard_D2s_v3',      # B1ms → D2s_v3
+        'Standard_B2s': 'Standard_D2s_v3',       # B2s → D2s_v3
+        'Standard_B2ms': 'Standard_D4s_v3',      # B2ms → D4s_v3
+        'Standard_B4ms': 'Standard_D4s_v3',      # B4ms → D4s_v3
+        'Standard_B8ms': 'Standard_D8s_v3',      # B8ms → D8s_v3
+    }
+    
     def __init__(self):
         self.enabled = AZURE_CONFIG["enabled"]
         self.cache = PricingCache()
@@ -260,6 +280,14 @@ class AzurePricingFetcher:
         """Convert region code to Azure region name"""
         return self.region_map.get(region.lower(), 'US East')
     
+    def _get_fallback_vm(self, vm_size: str) -> Optional[str]:
+        """Get fallback VM if the requested VM size isn't available in Azure API"""
+        if vm_size in self.VM_SERIES_FALLBACK:
+            fallback = self.VM_SERIES_FALLBACK[vm_size]
+            logger.warning(f"[AZURE_FALLBACK] VM {vm_size} not available in Azure API, using fallback: {fallback}")
+            return fallback
+        return None
+    
     def get_vm_pricing(self, vm_size: str, region: str = "eastus") -> Optional[float]:
         """Get Azure VM pricing directly from Azure - returns MONTHLY price"""
         cache_key = f"azure_vm_{vm_size}_{region}"
@@ -279,6 +307,10 @@ class AzurePricingFetcher:
             
             url = "https://prices.azure.com/api/retail/prices"
             
+            # Check if VM size needs fallback
+            requested_vm = vm_size
+            fallback_vm = None
+            
             # Search for the VM SKU - note: API may return results for both "eastus" and regional names
             filter_str = f"armSkuName eq '{vm_size}'"
             
@@ -295,9 +327,30 @@ class AzurePricingFetcher:
                 
                 logger.debug(f"Azure API returned {len(items)} items for {vm_size}")
                 
+                # If no results found for this VM, try fallback
+                if not items:
+                    fallback_vm = self._get_fallback_vm(vm_size)
+                    if fallback_vm:
+                        logger.warning(f"[AZURE_FALLBACK] No pricing found for {vm_size}, retrying with fallback: {fallback_vm}")
+                        filter_str = f"armSkuName eq '{fallback_vm}'"
+                        params['$filter'] = filter_str
+                        response = requests.get(url, params=params, timeout=10)
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            items = data.get('Items', [])
+                            logger.debug(f"Azure API returned {len(items)} items for fallback VM {fallback_vm}")
+                        else:
+                            logger.error(f"Fallback VM {fallback_vm} also not found")
+                            return None
+                    else:
+                        logger.warning(f"No pricing found for {vm_size} and no fallback available")
+                        return None
+                
                 # Find the best match in the requested region
                 best_price = None
                 found_region = False
+                actual_vm = fallback_vm or requested_vm
                 
                 for item in items:
                     item_region = item.get('armRegionName', '').lower()
@@ -318,14 +371,14 @@ class AzurePricingFetcher:
                         price = float(item.get('retailPrice', 0))
                         if price > 0:
                             best_price = price
-                            logger.debug(f"✓ Found {vm_size} in {region}: {meter_name} = ${price}/hr")
+                            logger.debug(f"✓ Found {actual_vm} in {region}: {meter_name} = ${price}/hr")
                             break
                     # Fallback to Windows if no Linux found
                     elif not best_price:
                         price = float(item.get('retailPrice', 0))
                         if price > 0:
                             best_price = price
-                            logger.debug(f"✓ Found {vm_size} in {region}: {meter_name} = ${price}/hr (Windows)")
+                            logger.debug(f"✓ Found {actual_vm} in {region}: {meter_name} = ${price}/hr (Windows)")
                 
                 if best_price:
                     monthly_price = best_price * 730
@@ -333,16 +386,21 @@ class AzurePricingFetcher:
                         'price': monthly_price,
                         'timestamp': datetime.now().isoformat(),
                         'source': 'azure_retail_api',
-                        'sku': vm_size
+                        'sku': vm_size,
+                        'fallback_sku': fallback_vm
                     })
-                    logger.info(f"✓ Azure VM pricing from API: {vm_size} in {region} = "
-                              f"${best_price:.4f}/hr (${monthly_price:.2f}/month)")
+                    if fallback_vm:
+                        logger.info(f"✓ Azure VM pricing from API: {requested_vm} (fallback: {fallback_vm}) in {region} = "
+                                  f"${best_price:.4f}/hr (${monthly_price:.2f}/month)")
+                    else:
+                        logger.info(f"✓ Azure VM pricing from API: {vm_size} in {region} = "
+                                  f"${best_price:.4f}/hr (${monthly_price:.2f}/month)")
                     return monthly_price
                 else:
                     if found_region:
-                        logger.warning(f"Found {vm_size} in {region} but all prices were filtered out (Spot/Low Priority)")
+                        logger.warning(f"Found {actual_vm} in {region} but all prices were filtered out (Spot/Low Priority)")
                     else:
-                        logger.warning(f"No pricing found for {vm_size} in region {region}")
+                        logger.warning(f"No pricing found for {actual_vm} in region {region}")
                     return None
             
             logger.warning(f"No pricing found for Azure VM {vm_size} in {region} via API")

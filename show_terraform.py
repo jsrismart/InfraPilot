@@ -2,7 +2,7 @@ import requests
 
 prompt = 'Create a azure vm in A series size at South india location'
 response = requests.post(
-    'http://127.0.0.1:8001/api/v1/infra/generate-iac',
+    'http://127.0.0.1:8000/api/v1/infra/generate-iac',
     json={'prompt': prompt},
     timeout=15
 )

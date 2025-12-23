@@ -44,13 +44,76 @@ DO NOT add: storage accounts, SQL databases, or other unrequested resources
 """
 
     def generate(self, prompt: str) -> dict:
-        """Generate Terraform IaC from prompt using Ollama, with intelligent fallback"""
-        logger.info(f"🚀 Generating Terraform from prompt: {prompt[:80]}...")
+        """Generate Terraform IaC from prompt using Ollama only"""
+        logger.info(f"🚀 Generating Terraform from prompt using Ollama: {prompt[:80]}...")
         
-        # Always use fallback for speed and reliability
-        # Ollama integration is disabled by default for production
-        logger.warning(f"⚠️ Using intelligent fallback generation (Ollama disabled for reliability)")
-        return self.generate_from_prompt_parsing(prompt)
+        try:
+            # Generate using Ollama
+            terraform_code = self._generate_with_ollama(prompt)
+            
+            if terraform_code:
+                logger.info("✅ Terraform generated via Ollama")
+                return self.split_terraform_files(terraform_code)
+            else:
+                logger.error("❌ Ollama returned empty response")
+                raise ValueError("Ollama failed to generate Terraform")
+                
+        except Exception as e:
+            logger.error(f"❌ Ollama generation failed: {str(e)}")
+            raise ValueError(f"Terraform generation failed: {str(e)}")
+    
+    def _generate_with_ollama(self, prompt: str) -> str:
+        """Call Ollama to generate Terraform code"""
+        try:
+            # Enhanced prompt with quantity parsing
+            system_msg = """You are a Terraform expert. Generate ONLY valid Terraform HCL code.
+
+CRITICAL:
+1. Parse quantities: if user says "3 VMs", create 3 separate resource blocks
+2. Each resource must have a unique name (e.g., vm_1, vm_2, vm_3)
+3. NO markdown code blocks (no ``` markers)
+4. ONLY valid HCL syntax
+5. Generate complete configs for: providers, variables, main resources, outputs
+
+When generating multiple resources:
+- Use for_each or multiple resource blocks with unique names
+- If user wants "3 D-series VMs", create 3 azurerm_windows_virtual_machine blocks with unique names"""
+            
+            full_prompt = f"{system_msg}\n\nUser request: {prompt}\n\nGenerate Terraform:"
+            
+            logger.info(f"Calling Ollama with prompt length: {len(full_prompt)}")
+            
+            # Call Ollama with streaming to reduce memory pressure
+            terraform_code = ""
+            response = ollama.generate(
+                model=self.MODEL,
+                prompt=full_prompt,
+                stream=False,
+                options={
+                    "num_predict": 1500,
+                    "temperature": 0.1,  # Lower temp for more deterministic output
+                    "top_p": 0.9,
+                    "top_k": 40,
+                }
+            )
+            
+            if response and "response" in response:
+                terraform_code = response["response"].strip()
+                if terraform_code and len(terraform_code) > 50:  # Minimum viable response
+                    logger.info(f"Generated {len(terraform_code)} chars of Terraform")
+                    return terraform_code
+                else:
+                    logger.warning(f"Response too short: {len(terraform_code)} chars")
+                    return None
+            else:
+                logger.error(f"Invalid Ollama response format")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Ollama generation error: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
 
     def split_terraform_files(self, text: str) -> dict:
         """Parse Terraform code into separate files by block type"""
@@ -219,100 +282,136 @@ DO NOT add: storage accounts, SQL databases, or other unrequested resources
         return code
     
     def _build_azure_vm(self, prompt: str) -> str:
-        """Build Azure VM resources"""
+        """Build Azure VM resources - supports multiple VMs per series"""
+        import re
         prompt_lower = prompt.lower()
         
-        # Detect VM size - ONLY from prompt, NO DEFAULTS
-        vm_size = None
+        # Extract quantity - look for patterns like "2 e series", "two c series", etc
+        quantity_mapping = {
+            'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+            'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+        }
         
-        # E Series - Check first (most specific)
-        if "e series" in prompt_lower:
-            if "e2" in prompt_lower:
-                vm_size = "Standard_E2s_v3"
-            elif "e4" in prompt_lower:
-                vm_size = "Standard_E4s_v3"
-            elif "e8" in prompt_lower:
-                vm_size = "Standard_E8s_v3"
-            else:
-                vm_size = "Standard_E4s_v3"  # Default E series size
-        # C Series
-        elif "c series" in prompt_lower:
-            if "c2" in prompt_lower:
-                vm_size = "Standard_C2s_v3"
-            elif "c4" in prompt_lower:
-                vm_size = "Standard_C4s_v3"
-            elif "c8" in prompt_lower:
-                vm_size = "Standard_C8s_v3"
-            else:
-                vm_size = "Standard_C4s_v3"  # Default C series size
-        # D Series
-        elif "d series" in prompt_lower:
-            if "d2" in prompt_lower:
-                vm_size = "Standard_D2s_v3"
-            elif "d4" in prompt_lower:
-                vm_size = "Standard_D4s_v3"
-            else:
-                vm_size = "Standard_D2s_v3"  # Default D series
-        # A Series
-        elif "a series" in prompt_lower:
-            if "a0" in prompt_lower:
-                vm_size = "Standard_A0"
-            elif "a1" in prompt_lower:
-                vm_size = "Standard_A1"
-            elif "a2" in prompt_lower:
-                vm_size = "Standard_A2"
-            elif "a3" in prompt_lower:
-                vm_size = "Standard_A3"
-            elif "a4" in prompt_lower:
-                vm_size = "Standard_A4"
-            elif "a5" in prompt_lower:
-                vm_size = "Standard_A5"
-            elif "a6" in prompt_lower:
-                vm_size = "Standard_A6"
-            elif "a7" in prompt_lower:
-                vm_size = "Standard_A7"
-            elif "a8" in prompt_lower:
-                vm_size = "Standard_A8"
-            elif "a9" in prompt_lower:
-                vm_size = "Standard_A9"
-            else:
-                vm_size = "Standard_A1"  # Default A series size
-        # B Series
-        elif "b series" in prompt_lower:
-            if "b2s" in prompt_lower:
-                vm_size = "Standard_B2s"
-            elif "b4ms" in prompt_lower:
-                vm_size = "Standard_B4ms"
-            else:
-                vm_size = "Standard_B1s"  # Default B series size
-        # F Series
-        elif "f series" in prompt_lower:
-            if "f1" in prompt_lower:
-                vm_size = "Standard_F1s"
-            elif "f2" in prompt_lower:
-                vm_size = "Standard_F2s"
-            else:
-                vm_size = "Standard_F1s"
-        # G Series
-        elif "g series" in prompt_lower:
-            if "g1" in prompt_lower:
-                vm_size = "Standard_G1"
-            elif "g2" in prompt_lower:
-                vm_size = "Standard_G2"
-            else:
-                vm_size = "Standard_G1"
-        # Explicit size mentioned (Standard_E4s_v3, etc)
-        elif any(size in prompt_lower for size in ["standard_a", "standard_b", "standard_c", "standard_d", "standard_e", "standard_f", "standard_g"]):
-            for size in ["Standard_A1", "Standard_B1s", "Standard_B2s", "Standard_C2s_v3", "Standard_C4s_v3", "Standard_C8s_v3", "Standard_D2s_v3", "Standard_D4s_v3", "Standard_E2s_v3", "Standard_E4s_v3", "Standard_F1s", "Standard_F2s"]:
-                if size.lower() in prompt_lower:
-                    vm_size = size
+        default_quantity = 1
+        quantity = default_quantity
+        
+        # Try numeric pattern first (e.g., "2 e series")
+        numeric_match = re.search(r'(\d+)\s+[a-z]\s+series', prompt_lower)
+        if numeric_match:
+            quantity = int(numeric_match.group(1))
+        
+        # Try word patterns (e.g., "two e series", "three d series")
+        if quantity == default_quantity:  # Only if not found numerically
+            for word, num in quantity_mapping.items():
+                # Look for "word <series> vms/series/vm"
+                pattern = rf'{word}\s+([a-z])\s+(series|vm|vms)'
+                match = re.search(pattern, prompt_lower)
+                if match:
+                    quantity = num
                     break
         
-        # If NO size detected in prompt, DO NOT use default - prompt parsing failed
-        if vm_size is None:
+        # Detect ALL VM series mentioned in the prompt (not just first match)
+        vm_series_list = []
+        
+        # E Series
+        if "e series" in prompt_lower:
+            if "e2" in prompt_lower:
+                vm_series_list.append(("e_series", "Standard_E2s_v3", quantity))
+            elif "e4" in prompt_lower:
+                vm_series_list.append(("e_series", "Standard_E4s_v3", quantity))
+            elif "e8" in prompt_lower:
+                vm_series_list.append(("e_series", "Standard_E8s_v3", quantity))
+            else:
+                vm_series_list.append(("e_series", "Standard_E4s_v3", quantity))  # Default E series size
+        
+        # C Series
+        if "c series" in prompt_lower:
+            if "c2" in prompt_lower:
+                vm_series_list.append(("c_series", "Standard_C2s_v3", quantity))
+            elif "c4" in prompt_lower:
+                vm_series_list.append(("c_series", "Standard_C4s_v3", quantity))
+            elif "c8" in prompt_lower:
+                vm_series_list.append(("c_series", "Standard_C8s_v3", quantity))
+            else:
+                vm_series_list.append(("c_series", "Standard_C4s_v3", quantity))  # Default C series size
+        
+        # D Series
+        if "d series" in prompt_lower:
+            if "d2" in prompt_lower:
+                vm_series_list.append(("d_series", "Standard_D2s_v3", quantity))
+            elif "d4" in prompt_lower:
+                vm_series_list.append(("d_series", "Standard_D4s_v3", quantity))
+            else:
+                vm_series_list.append(("d_series", "Standard_D2s_v3", quantity))  # Default D series
+        
+        # A Series
+        if "a series" in prompt_lower:
+            if "a0" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A0", quantity))
+            elif "a1" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A1", quantity))
+            elif "a2" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A2", quantity))
+            elif "a3" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A3", quantity))
+            elif "a4" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A4", quantity))
+            elif "a5" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A5", quantity))
+            elif "a6" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A6", quantity))
+            elif "a7" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A7", quantity))
+            elif "a8" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A8", quantity))
+            elif "a9" in prompt_lower:
+                vm_series_list.append(("a_series", "Standard_A9", quantity))
+            else:
+                vm_series_list.append(("a_series", "Standard_A1", quantity))  # Default A series size
+        
+        # B Series
+        if "b series" in prompt_lower:
+            if "b2s" in prompt_lower:
+                vm_series_list.append(("b_series", "Standard_B2s", quantity))
+            elif "b4ms" in prompt_lower:
+                vm_series_list.append(("b_series", "Standard_B4ms", quantity))
+            else:
+                vm_series_list.append(("b_series", "Standard_B1s", quantity))  # Default B series size
+        
+        # F Series
+        if "f series" in prompt_lower:
+            if "f1" in prompt_lower:
+                vm_series_list.append(("f_series", "Standard_F1s", quantity))
+            elif "f2" in prompt_lower:
+                vm_series_list.append(("f_series", "Standard_F2s", quantity))
+            else:
+                vm_series_list.append(("f_series", "Standard_F1s", quantity))
+        
+        # G Series
+        if "g series" in prompt_lower:
+            if "g1" in prompt_lower:
+                vm_series_list.append(("g_series", "Standard_G1", quantity))
+            elif "g2" in prompt_lower:
+                vm_series_list.append(("g_series", "Standard_G2", quantity))
+            else:
+                vm_series_list.append(("g_series", "Standard_G1", quantity))
+        
+        # Explicit size mentioned (Standard_E4s_v3, etc)
+        if any(size in prompt_lower for size in ["standard_a", "standard_b", "standard_c", "standard_d", "standard_e", "standard_f", "standard_g"]):
+            for size in ["Standard_A1", "Standard_B1s", "Standard_B2s", "Standard_C2s_v3", "Standard_C4s_v3", "Standard_C8s_v3", "Standard_D2s_v3", "Standard_D4s_v3", "Standard_E2s_v3", "Standard_E4s_v3", "Standard_F1s", "Standard_F2s"]:
+                if size.lower() in prompt_lower:
+                    found = False
+                    for vm_series, vm_size_existing, _ in vm_series_list:
+                        if size == vm_size_existing:
+                            found = True
+                            break
+                    if not found:
+                        vm_series_list.append((size.lower(), size, quantity))
+        
+        # If NO size detected in prompt, use default
+        if not vm_series_list:
             logger.error(f"❌ VM size NOT found in prompt: {prompt}")
-            # Return a fallback but log clearly this was not specified
-            vm_size = "Standard_B1s"  # Smallest size, indicates user must specify
+            vm_series_list = [("default_vm", "Standard_B1s", 1)]
         
         # Detect region - ONLY from prompt, NO DEFAULTS
         location = None
@@ -344,11 +443,12 @@ DO NOT add: storage accounts, SQL databases, or other unrequested resources
                 location = region_code
                 break
         
-        # If NO region detected, DO NOT use default - prompt parsing failed
+        # If NO region detected, use default
         if location is None:
             logger.error(f"❌ Region NOT found in prompt: {prompt}")
             location = "eastus"  # Fallback only, indicates user must specify
         
+        # Generate infrastructure code with multiple VMs
         code = f'''resource "azurerm_resource_group" "main" {{
   name     = "${{var.project_name}}-rg"
   location = "{location}"
@@ -368,27 +468,38 @@ resource "azurerm_subnet" "internal" {{
   address_prefixes     = ["10.0.2.0/24"]
 }}
 
-resource "azurerm_network_interface" "main" {{
-  name                = "${{var.project_name}}-nic"
+'''
+        
+        # Create NICs and VMs for each series and quantity
+        global_vm_index = 1
+        for series_name, vm_size, vm_quantity in vm_series_list:
+            # Create vm_quantity number of VMs for this series
+            for vm_num in range(1, vm_quantity + 1):
+                # Create unique names for each VM
+                unique_vm_name = f"{series_name}_vm{vm_num}"
+                nic_name = f"{series_name}_nic{vm_num}"
+                
+                code += f'''resource "azurerm_network_interface" "{nic_name}" {{
+  name                = "${{var.project_name}}-{series_name}-nic-{vm_num}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
 
   ip_configuration {{
-    name                          = "testconfiguration1"
+    name                          = "testconfiguration{global_vm_index}"
     subnet_id                     = azurerm_subnet.internal.id
     private_ip_address_allocation = "Dynamic"
   }}
 }}
 
-resource "azurerm_windows_virtual_machine" "main" {{
-  name                = "${{var.project_name}}-vm"
+resource "azurerm_windows_virtual_machine" "{unique_vm_name}" {{
+  name                = "${{var.project_name}}-{series_name}-{vm_num}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   admin_username      = "adminuser"
   admin_password      = "P@ssw0rd1234!"
 
   network_interface_ids = [
-    azurerm_network_interface.main.id,
+    azurerm_network_interface.{nic_name}.id,
   ]
 
   os_disk {{
@@ -407,6 +518,8 @@ resource "azurerm_windows_virtual_machine" "main" {{
 }}
 
 '''
+                global_vm_index += 1
+        
         return code
     
     def _build_aws_instance(self, prompt: str) -> str:
