@@ -7,10 +7,11 @@ interface DiagramViewProps {
 }
 
 export default function DiagramView({ result, loading }: DiagramViewProps) {
-  const [diagramType, setDiagramType] = useState<"ascii" | "mermaid" | "lucidchart" | "json" | "svg" | "png" | "html">("svg");
+  const [diagramType, setDiagramType] = useState<"ascii" | "mermaid" | "lucidchart" | "json" | "svg" | "png" | "html">("lucidchart");
   const [diagramContent, setDiagramContent] = useState<string | null>(null);
   const [diagramLoading, setDiagramLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [lucidchartDocTitle, setLucidchartDocTitle] = useState("Infrastructure Diagram");
 
   const generateDiagram = async () => {
     if (!result?.iac) return;
@@ -44,6 +45,46 @@ export default function DiagramView({ result, loading }: DiagramViewProps) {
     } catch (error) {
       console.error("Diagram generation error:", error);
       setDiagramContent("Failed to generate diagram. Please try again.");
+    } finally {
+      setDiagramLoading(false);
+    }
+  };
+
+  const exportToLucidchart = async () => {
+    if (!result?.iac) return;
+
+    setDiagramLoading(true);
+    try {
+      const terraformCode = Object.values(result.iac).join("\n\n");
+      const baseUrl = import.meta.env.VITE_API_BASE || "http://localhost:8000/api/v1";
+      
+      const response = await fetch(`${baseUrl}/diagram/lucidchart/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          terraform_code: terraformCode,
+          lucidchart_doc_title: lucidchartDocTitle,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to export to Lucidchart");
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Document created successfully - open it
+        window.open(data.share_link, "_blank");
+        alert(`Diagram exported to Lucidchart!\n\nDocument: ${lucidchartDocTitle}\nLink: ${data.share_link}`);
+      } else if (data.manual_import) {
+        // API not configured - show instructions for manual import
+        setDiagramContent(data.mermaid_code);
+        alert("Lucidchart API not configured. Please copy the Mermaid code and manually import it to Lucidchart.");
+      }
+    } catch (error) {
+      console.error("Lucidchart export error:", error);
+      alert("Failed to export to Lucidchart. Please try downloading the diagram instead.");
     } finally {
       setDiagramLoading(false);
     }
@@ -147,7 +188,7 @@ export default function DiagramView({ result, loading }: DiagramViewProps) {
       </div>
 
       {/* Generate and Download Buttons */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         <button
           onClick={generateDiagram}
           disabled={diagramLoading || !result?.iac}
@@ -173,6 +214,28 @@ export default function DiagramView({ result, loading }: DiagramViewProps) {
               📋 Copy
             </button>
           </>
+        )}
+
+        {/* Lucidchart Export Section */}
+        {diagramType === "lucidchart" && (
+          <div className="flex gap-2 items-center">
+            <input
+              type="text"
+              value={lucidchartDocTitle}
+              onChange={(e) => setLucidchartDocTitle(e.target.value)}
+              placeholder="Diagram title for Lucidchart"
+              className="px-3 py-2 bg-gray-700 text-white rounded-lg text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={diagramLoading}
+            />
+            <button
+              onClick={exportToLucidchart}
+              disabled={diagramLoading || !result?.iac}
+              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition disabled:bg-gray-600 disabled:cursor-not-allowed"
+              title="Export directly to your Lucidchart account"
+            >
+              {diagramLoading ? "Exporting..." : "🚀 Export to Lucidchart"}
+            </button>
+          </div>
         )}
       </div>
 
