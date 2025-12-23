@@ -4,7 +4,7 @@ import socketserver
 import os
 from pathlib import Path
 
-PORT = 3001
+PORTS = [5000, 9000, 9001, 9002]  # Try multiple ports
 ROOT_DIR = Path(__file__).parent
 
 class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -17,11 +17,25 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 # Change to root directory
 os.chdir(ROOT_DIR)
 
-with socketserver.TCPServer(("127.0.0.1", PORT), MyHTTPRequestHandler) as httpd:
-    print(f"✓ Frontend server running at http://localhost:{PORT}")
-    print(f"✓ Open http://localhost:{PORT}/simple_frontend.html in your browser")
-    print(f"✓ Backend API at http://localhost:8001")
+# Try to bind to available port
+httpd = None
+port_used = None
+for PORT in PORTS:
+    try:
+        httpd = socketserver.TCPServer(("0.0.0.0", PORT), MyHTTPRequestHandler)
+        port_used = PORT
+        break
+    except OSError as e:
+        continue
+
+if httpd:
+    print(f"✓ Frontend server running at http://localhost:{port_used}")
+    print(f"✓ Open http://localhost:{port_used}/simple_frontend.html in your browser")
+    print(f"✓ Backend API at http://localhost:8000/api/v1")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\n✓ Server stopped")
+else:
+    print("✗ Failed to bind to any available port")
+    exit(1)
