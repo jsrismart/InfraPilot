@@ -1,6 +1,0 @@
-INFO:real_time_pricing_fetcher:AWS Pricing API client initialized
-INFO:real_time_pricing_fetcher:Azure Pricing Fetcher initialized (using Azure Retail Prices API)
-INFO:     Started server process [32884]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit)
