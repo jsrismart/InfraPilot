@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "C:\Users\SridharJayaraman\Desktop\Reference\InfraPilot-Accelarator\Repo-Infrapilot\sridhar_branch\InfraPilot\frontend_server.py", line 27, in <module>
+    with socketserver.TCPServer(("127.0.0.1", PORT), MyHTTPRequestHandler) as httpd:
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SridharJayaraman\AppData\Local\Python\pythoncore-3.14-64\Lib\socketserver.py", line 457, in __init__
+    self.server_bind()
+    ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\SridharJayaraman\AppData\Local\Python\pythoncore-3.14-64\Lib\socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions

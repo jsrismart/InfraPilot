@@ -1,0 +1,23 @@
+INFO:real_time_pricing_fetcher:AWS Pricing API client initialized
+INFO:real_time_pricing_fetcher:Azure Pricing Fetcher initialized (using Azure Retail Prices API)
+WARNING:infrapilot:\u26a0\ufe0f Infracost not available, using estimated costs: [WinError 2] The system cannot find the file specified
+INFO:pricing_calculator:[AZURE_PRICING] Calculating cost for: type=azurerm_windows_virtual_machine, instance_type=Standard_D2s_v3, qty=1
+INFO:pricing_calculator:[AZURE_PRICING] Normalized VM size: 'Standard_D2s_v3' \u2192 'Standard_D2s_v3'
+INFO:pricing_calculator:[AZURE_PRICING] Normalized region: 'eastus' \u2192 'eastus'
+INFO:pricing_calculator:[AZURE_PRICING] OS type detected: windows
+INFO:pricing_calculator:[AZURE_PRICING] Calling Azure API for VM: 'Standard_D2s_v3' in 'eastus' (OS: windows)
+INFO:real_time_pricing_fetcher:\u2713 Azure VM pricing from API: Standard_D2s_v3 in eastus = $0.0960/hr ($70.08/month)
+INFO:pricing_calculator:[AZURE_PRICING] \u2713 Azure API returned: $70.08/month \u2192 Total: $70.08/month
+======================================================================
+PRICING CALCULATION TEST
+======================================================================
+Testing with pre-generated Terraform for 3 D-series Azure VMs
+
+Traceback (most recent call last):
+  File "C:\Users\SridharJayaraman\Desktop\Reference\InfraPilot-Accelarator\Repo-Infrapilot\sridhar_branch\InfraPilot\test_pricing_only.py", line 85, in <module>
+    print(f"\u2705 Pricing calculated successfully!")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SridharJayaraman\AppData\Local\Python\pythoncore-3.14-64\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 0: character maps to <undefined>

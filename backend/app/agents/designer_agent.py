@@ -44,13 +44,188 @@ DO NOT add: storage accounts, SQL databases, or other unrequested resources
 """
 
     def generate(self, prompt: str) -> dict:
-        """Generate Terraform IaC from prompt using Ollama, with intelligent fallback"""
-        logger.info(f"🚀 Generating Terraform from prompt: {prompt[:80]}...")
+        """Generate Terraform IaC from prompt using Ollama only"""
+        logger.info(f"🚀 Generating Terraform from prompt using Ollama: {prompt[:80]}...")
         
-        # Always use fallback for speed and reliability
-        # Ollama integration is disabled by default for production
-        logger.warning(f"⚠️ Using intelligent fallback generation (Ollama disabled for reliability)")
-        return self.generate_from_prompt_parsing(prompt)
+        try:
+            # Generate using Ollama
+            terraform_code = self._generate_with_ollama(prompt)
+            
+            if terraform_code:
+                logger.info("✅ Terraform generated via Ollama")
+                return self.split_terraform_files(terraform_code)
+            else:
+                logger.error("❌ Ollama returned empty response")
+                raise ValueError("Ollama failed to generate Terraform")
+                
+        except Exception as e:
+            logger.error(f"❌ Ollama generation failed: {str(e)}")
+            raise ValueError(f"Terraform generation failed: {str(e)}")
+    
+    def _generate_with_ollama(self, prompt: str) -> str:
+        """Call Ollama to generate Terraform code"""
+        try:
+            # Detect OS type from prompt BEFORE calling Ollama
+            prompt_lower = prompt.lower()
+            os_type = "unknown"
+            
+            # More robust OS detection - check for explicit OS keywords
+            linux_keywords = ["linux", "ubuntu", "centos", "rhel", "debian", "alma", "rocky"]
+            windows_keywords = ["windows", "server 2019", "server 2016", "server 2022", "sql server"]
+            
+            # Count keyword occurrences
+            linux_count = sum(1 for keyword in linux_keywords if keyword in prompt_lower)
+            windows_count = sum(1 for keyword in windows_keywords if keyword in prompt_lower)
+            
+            if linux_count > windows_count:
+                os_type = "linux"
+            elif windows_count > linux_count:
+                os_type = "windows"
+            elif "linux" in prompt_lower:
+                os_type = "linux"
+            elif "windows" in prompt_lower:
+                os_type = "windows"
+            
+            logger.info(f"🔍 Detected OS type from prompt: {os_type} (linux_count={linux_count}, windows_count={windows_count})")
+            
+            # Enhanced prompt with quantity parsing and OS detection
+            system_msg = f"""You are an expert Terraform code generator for Azure infrastructure.
+
+CRITICAL: User explicitly requested {os_type.upper()} infrastructure.
+
+RULES FOR {os_type.upper()}:
+"""
+            
+            if os_type == "linux":
+                system_msg += """- MUST use azurerm_linux_virtual_machine (NEVER azurerm_windows_virtual_machine)
+- Publisher: "Canonical"
+- Offer: "UbuntuServer"
+- SKU: "18.04-LTS"
+- NO provision_vm_agent or enable_automatic_updates
+"""
+            elif os_type == "windows":
+                system_msg += """- MUST use azurerm_windows_virtual_machine (NEVER azurerm_linux_virtual_machine)
+- Publisher: "MicrosoftWindowsServer"
+- Offer: "WindowsServer"
+- SKU: "2019-Datacenter"
+"""
+            
+            system_msg += """
+REQUIREMENTS:
+- Generate complete, valid Terraform HCL
+- NO markdown backticks or code blocks
+- Parse quantities: if "10 VMs", create 10 separate resources (vm_1, vm_2, etc)
+- Include all configuration files: providers.tf, variables.tf, main.tf, outputs.tf
+- Output MUST be valid and deployable"""
+            
+            full_prompt = f"{system_msg}\n\nUser request: {prompt}\n\nGenerate Terraform ({os_type.upper()}):"
+            
+            logger.info(f"Calling Ollama with OS={os_type}, prompt length: {len(full_prompt)}")
+            
+            # Call Ollama with streaming to reduce memory pressure
+            terraform_code = ""
+            response = ollama.generate(
+                model=self.MODEL,
+                prompt=full_prompt,
+                stream=False,
+                options={
+                    "num_predict": 800,  # Reduced from 1500 for faster generation
+                    "temperature": 0.2,  # Slightly higher for better coherence
+                    "top_p": 0.95,  # Increased for better diversity
+                    "top_k": 50,
+                }
+            )
+            
+            if response and "response" in response:
+                terraform_code = response["response"].strip()
+                if terraform_code and len(terraform_code) > 50:  # Minimum viable response
+                    logger.info(f"Generated {len(terraform_code)} chars of Terraform")
+                    
+                    # POST-PROCESSING: Fix OS type if Ollama generated wrong one
+                    terraform_code = self._fix_os_type(terraform_code, os_type)
+                    
+                    return terraform_code
+                else:
+                    logger.warning(f"Response too short: {len(terraform_code)} chars")
+                    return None
+            else:
+                logger.error(f"Invalid Ollama response format")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Ollama generation error: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+
+    def _fix_os_type(self, terraform_code: str, os_type: str) -> str:
+        """Post-process Terraform code to ensure correct OS type is used"""
+        if not os_type or not terraform_code:
+            return terraform_code
+        
+        os_type = os_type.lower()
+        
+        if os_type == "linux":
+            # Convert Windows VMs to Linux
+            terraform_code = terraform_code.replace(
+                "azurerm_windows_virtual_machine",
+                "azurerm_linux_virtual_machine"
+            )
+            
+            # Fix publisher references from Windows to Linux distributions
+            terraform_code = terraform_code.replace(
+                'publisher = "MicrosoftWindowsServer"',
+                'publisher = "Canonical"'
+            )
+            terraform_code = terraform_code.replace(
+                'offer = "WindowsServer"',
+                'offer = "UbuntuServer"'
+            )
+            terraform_code = terraform_code.replace(
+                'sku = "2019-Datacenter"',
+                'sku = "18.04-LTS"'
+            )
+            terraform_code = terraform_code.replace(
+                'sku = "2016-Datacenter"',
+                'sku = "18.04-LTS"'
+            )
+            
+            # Remove Windows-specific configurations
+            lines = terraform_code.split('\n')
+            fixed_lines = []
+            for line in lines:
+                # Skip Windows-only config
+                if any(skip in line.lower() for skip in ['enable_automatic_updates', 'provision_vm_agent']):
+                    continue
+                fixed_lines.append(line)
+            terraform_code = '\n'.join(fixed_lines)
+            
+            logger.info(f"Fixed OS type to Linux")
+        
+        elif os_type == "windows":
+            # Convert Linux VMs to Windows
+            terraform_code = terraform_code.replace(
+                "azurerm_linux_virtual_machine",
+                "azurerm_windows_virtual_machine"
+            )
+            
+            # Fix publisher references from Linux to Windows
+            terraform_code = terraform_code.replace(
+                'publisher = "Canonical"',
+                'publisher = "MicrosoftWindowsServer"'
+            )
+            terraform_code = terraform_code.replace(
+                'offer = "UbuntuServer"',
+                'offer = "WindowsServer"'
+            )
+            terraform_code = terraform_code.replace(
+                'sku = "18.04-LTS"',
+                'sku = "2019-Datacenter"'
+            )
+            
+            logger.info(f"Fixed OS type to Windows")
+        
+        return terraform_code
 
     def split_terraform_files(self, text: str) -> dict:
         """Parse Terraform code into separate files by block type"""
@@ -128,347 +303,3 @@ DO NOT add: storage accounts, SQL databases, or other unrequested resources
 
         # Return only non-empty files
         return {k: v.strip() for k, v in files.items() if v.strip()}
-
-    def generate_from_prompt_parsing(self, prompt: str) -> dict:
-        """Intelligent fallback: Parse prompt to generate Terraform dynamically"""
-        logger.info(f"📝 Parsing prompt to generate Terraform: {prompt[:100]}")
-        
-        prompt_lower = prompt.lower()
-        
-        # Detect cloud provider
-        provider = "azurerm"  # default to Azure
-        if "aws" in prompt_lower:
-            provider = "aws"
-        elif "gcp" in prompt_lower:
-            provider = "google"
-        
-        # Build provider block
-        if provider == "azurerm":
-            provider_code = 'provider "azurerm" {\n  features {}\n}'
-        elif provider == "aws":
-            provider_code = 'provider "aws" {\n  region = "us-east-1"\n}'
-        else:
-            provider_code = 'provider "google" {\n  project = var.project_id\n}'
-        
-        # Detect what resources are needed
-        resources_needed = []
-        
-        # Check for VMs
-        if any(keyword in prompt_lower for keyword in ["vm", "virtual machine", "instance"]):
-            resources_needed.append("vm")
-        
-        # Check for networking
-        if any(keyword in prompt_lower for keyword in ["vnet", "network", "vpc", "subnet"]):
-            resources_needed.append("network")
-        
-        # Check for storage
-        if any(keyword in prompt_lower for keyword in ["storage", "s3", "bucket"]):
-            resources_needed.append("storage")
-        
-        # Check for database
-        if any(keyword in prompt_lower for keyword in ["database", "sql", "db", "postgres", "mysql"]):
-            resources_needed.append("database")
-        
-        # Check for load balancer
-        if any(keyword in prompt_lower for keyword in ["load balance", "lb", "alb"]):
-            resources_needed.append("loadbalancer")
-        
-        logger.info(f"Detected resources: {resources_needed}")
-        
-        # Generate Terraform based on detected resources
-        terraform_code = self._build_terraform_for_resources(provider, resources_needed, prompt)
-        
-        return self.split_terraform_files(terraform_code)
-    
-    def _build_terraform_for_resources(self, provider: str, resources: list, prompt: str) -> str:
-        """Build Terraform code for detected resources"""
-        
-        # Provider block
-        if provider == "azurerm":
-            code = 'provider "azurerm" {\n  features {}\n}\n\n'
-        elif provider == "aws":
-            code = 'provider "aws" {\n  region = "us-east-1"\n}\n\n'
-        else:
-            code = 'provider "google" {\n  project = var.project_id\n}\n\n'
-        
-        # Variables - NO default values for prompt-driven generation
-        code += 'variable "project_name" {\n  type = string\n}\n\n'
-        
-        # Build resources based on what was requested
-        if "vm" in resources:
-            if provider == "azurerm":
-                code += self._build_azure_vm(prompt)
-            elif provider == "aws":
-                code += self._build_aws_instance(prompt)
-        
-        if "network" in resources:
-            if provider == "azurerm":
-                code += self._build_azure_network(prompt)
-            elif provider == "aws":
-                code += self._build_aws_vpc(prompt)
-        
-        if "storage" in resources:
-            if provider == "azurerm":
-                code += self._build_azure_storage(prompt)
-            elif provider == "aws":
-                code += self._build_aws_s3(prompt)
-        
-        # Outputs
-        code += '\noutput "deployment_id" {\n  value = var.project_name\n}\n'
-        
-        return code
-    
-    def _build_azure_vm(self, prompt: str) -> str:
-        """Build Azure VM resources"""
-        prompt_lower = prompt.lower()
-        
-        # Detect VM size - ONLY from prompt, NO DEFAULTS
-        vm_size = None
-        
-        # E Series - Check first (most specific)
-        if "e series" in prompt_lower:
-            if "e2" in prompt_lower:
-                vm_size = "Standard_E2s_v3"
-            elif "e4" in prompt_lower:
-                vm_size = "Standard_E4s_v3"
-            elif "e8" in prompt_lower:
-                vm_size = "Standard_E8s_v3"
-            else:
-                vm_size = "Standard_E4s_v3"  # Default E series size
-        # C Series
-        elif "c series" in prompt_lower:
-            if "c2" in prompt_lower:
-                vm_size = "Standard_C2s_v3"
-            elif "c4" in prompt_lower:
-                vm_size = "Standard_C4s_v3"
-            elif "c8" in prompt_lower:
-                vm_size = "Standard_C8s_v3"
-            else:
-                vm_size = "Standard_C4s_v3"  # Default C series size
-        # D Series
-        elif "d series" in prompt_lower:
-            if "d2" in prompt_lower:
-                vm_size = "Standard_D2s_v3"
-            elif "d4" in prompt_lower:
-                vm_size = "Standard_D4s_v3"
-            else:
-                vm_size = "Standard_D2s_v3"  # Default D series
-        # A Series
-        elif "a series" in prompt_lower:
-            if "a0" in prompt_lower:
-                vm_size = "Standard_A0"
-            elif "a1" in prompt_lower:
-                vm_size = "Standard_A1"
-            elif "a2" in prompt_lower:
-                vm_size = "Standard_A2"
-            elif "a3" in prompt_lower:
-                vm_size = "Standard_A3"
-            elif "a4" in prompt_lower:
-                vm_size = "Standard_A4"
-            elif "a5" in prompt_lower:
-                vm_size = "Standard_A5"
-            elif "a6" in prompt_lower:
-                vm_size = "Standard_A6"
-            elif "a7" in prompt_lower:
-                vm_size = "Standard_A7"
-            elif "a8" in prompt_lower:
-                vm_size = "Standard_A8"
-            elif "a9" in prompt_lower:
-                vm_size = "Standard_A9"
-            else:
-                vm_size = "Standard_A1"  # Default A series size
-        # B Series
-        elif "b series" in prompt_lower:
-            if "b2s" in prompt_lower:
-                vm_size = "Standard_B2s"
-            elif "b4ms" in prompt_lower:
-                vm_size = "Standard_B4ms"
-            else:
-                vm_size = "Standard_B1s"  # Default B series size
-        # F Series
-        elif "f series" in prompt_lower:
-            if "f1" in prompt_lower:
-                vm_size = "Standard_F1s"
-            elif "f2" in prompt_lower:
-                vm_size = "Standard_F2s"
-            else:
-                vm_size = "Standard_F1s"
-        # G Series
-        elif "g series" in prompt_lower:
-            if "g1" in prompt_lower:
-                vm_size = "Standard_G1"
-            elif "g2" in prompt_lower:
-                vm_size = "Standard_G2"
-            else:
-                vm_size = "Standard_G1"
-        # Explicit size mentioned (Standard_E4s_v3, etc)
-        elif any(size in prompt_lower for size in ["standard_a", "standard_b", "standard_c", "standard_d", "standard_e", "standard_f", "standard_g"]):
-            for size in ["Standard_A1", "Standard_B1s", "Standard_B2s", "Standard_C2s_v3", "Standard_C4s_v3", "Standard_C8s_v3", "Standard_D2s_v3", "Standard_D4s_v3", "Standard_E2s_v3", "Standard_E4s_v3", "Standard_F1s", "Standard_F2s"]:
-                if size.lower() in prompt_lower:
-                    vm_size = size
-                    break
-        
-        # If NO size detected in prompt, DO NOT use default - prompt parsing failed
-        if vm_size is None:
-            logger.error(f"❌ VM size NOT found in prompt: {prompt}")
-            # Return a fallback but log clearly this was not specified
-            vm_size = "Standard_B1s"  # Smallest size, indicates user must specify
-        
-        # Detect region - ONLY from prompt, NO DEFAULTS
-        location = None
-        region_mappings = {
-            "south india": "southindia",
-            "southindia": "southindia",
-            "central us": "centralus",
-            "centralus": "centralus",
-            "west us": "westus",
-            "westus": "westus",
-            "east us": "eastus",
-            "eastus": "eastus",
-            "north europe": "northeurope",
-            "northeurope": "northeurope",
-            "west europe": "westeurope",
-            "westeurope": "westeurope",
-            "uk south": "uksouth",
-            "uksouth": "uksouth",
-            "southeast asia": "southeastasia",
-            "southeastasia": "southeastasia",
-            "east asia": "eastasia",
-            "eastasia": "eastasia",
-            "west asia": "westasia",
-            "westasia": "westasia",
-        }
-        
-        for region_name, region_code in region_mappings.items():
-            if region_name in prompt_lower:
-                location = region_code
-                break
-        
-        # If NO region detected, DO NOT use default - prompt parsing failed
-        if location is None:
-            logger.error(f"❌ Region NOT found in prompt: {prompt}")
-            location = "eastus"  # Fallback only, indicates user must specify
-        
-        code = f'''resource "azurerm_resource_group" "main" {{
-  name     = "${{var.project_name}}-rg"
-  location = "{location}"
-}}
-
-resource "azurerm_virtual_network" "main" {{
-  name                = "${{var.project_name}}-vnet"
-  address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-}}
-
-resource "azurerm_subnet" "internal" {{
-  name                 = "${{var.project_name}}-subnet"
-  resource_group_name  = azurerm_resource_group.main.name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = ["10.0.2.0/24"]
-}}
-
-resource "azurerm_network_interface" "main" {{
-  name                = "${{var.project_name}}-nic"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-
-  ip_configuration {{
-    name                          = "testconfiguration1"
-    subnet_id                     = azurerm_subnet.internal.id
-    private_ip_address_allocation = "Dynamic"
-  }}
-}}
-
-resource "azurerm_windows_virtual_machine" "main" {{
-  name                = "${{var.project_name}}-vm"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  admin_username      = "adminuser"
-  admin_password      = "P@ssw0rd1234!"
-
-  network_interface_ids = [
-    azurerm_network_interface.main.id,
-  ]
-
-  os_disk {{
-    caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
-  }}
-
-  source_image_reference {{
-    publisher = "MicrosoftWindowsServer"
-    offer     = "WindowsServer"
-    sku       = "2019-Datacenter"
-    version   = "latest"
-  }}
-
-  vm_size = "{vm_size}"
-}}
-
-'''
-        return code
-    
-    def _build_aws_instance(self, prompt: str) -> str:
-        """Build AWS EC2 instance"""
-        return '''resource "aws_instance" "main" {
-  ami           = "ami-0c55b159cbfafe1f0"
-  instance_type = "t2.micro"
-
-  tags = {
-    Name = var.project_name
-  }
-}
-
-'''
-    
-    def _build_azure_network(self, prompt: str) -> str:
-        """Build Azure networking (included in VM setup)"""
-        return ""
-    
-    def _build_aws_vpc(self, prompt: str) -> str:
-        """Build AWS VPC"""
-        return '''resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-
-  tags = {
-    Name = var.project_name
-  }
-}
-
-resource "aws_subnet" "main" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "us-east-1a"
-
-  tags = {
-    Name = var.project_name
-  }
-}
-
-'''
-    
-    def _build_azure_storage(self, prompt: str) -> str:
-        """Build Azure Storage Account"""
-        return '''resource "azurerm_storage_account" "main" {
-  name                     = "${replace(var.project_name, "-", "")}storage"
-  resource_group_name      = azurerm_resource_group.main.name
-  location                 = azurerm_resource_group.main.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-}
-
-'''
-    
-    def _build_aws_s3(self, prompt: str) -> str:
-        """Build AWS S3 bucket"""
-        return '''resource "aws_s3_bucket" "main" {
-  bucket = var.project_name
-
-  tags = {
-    Name = var.project_name
-  }
-}
-
-'''

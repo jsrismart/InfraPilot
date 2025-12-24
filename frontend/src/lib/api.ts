@@ -22,26 +22,41 @@ export async function generateFull(prompt: string, fast: boolean = false): Promi
       url.searchParams.append("fast", "true");
     }
 
-    const res = await fetch(url.toString(), {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0"
-      },
-      body: JSON.stringify({ prompt }),
-      cache: "no-store"
-    });
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutMs = fast ? 60000 : 300000; // 1 min for fast mode, 5 min for full
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({}));
-      throw new Error(error.detail || `HTTP ${res.status}: Pipeline failed`);
+    try {
+      const res = await fetch(url.toString(), {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0"
+        },
+        body: JSON.stringify({ prompt }),
+        cache: "no-store",
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || `HTTP ${res.status}: Pipeline failed`);
+      }
+
+      return res.json();
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return res.json();
   } catch (error) {
     if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new Error("Request timed out. The AI model is taking too long to respond. Try enabling 'Fast Mode' for quicker results.");
+      }
       throw error;
     }
     throw new Error("Unknown error occurred");

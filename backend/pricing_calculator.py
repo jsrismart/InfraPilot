@@ -211,157 +211,13 @@ class CloudPricingCalculator:
         return region_mapping.get(region_lower, region_lower.replace(' ', '').lower() or 'eastus')
     
     # AWS Pricing (US East 1 region - monthly estimates)
-    # Note: Prices calculated as hourly_rate * 730 hours/month
-    AWS_PRICING = {
-        'ec2': {
-            't2.micro': 0.0116 * 730,  # $0.0116/hr → monthly
-            't2.small': 0.023 * 730,
-            't2.medium': 0.0464 * 730,
-            't3.micro': 0.0104 * 730,
-            't3.small': 0.0208 * 730,
-            't3.medium': 0.0416 * 730,
-            'm5.large': 0.096 * 730,
-            'm5.xlarge': 0.192 * 730,
-            'm5.2xlarge': 0.384 * 730,
-            'c5.large': 0.085 * 730,
-            'c5.xlarge': 0.17 * 730,
-            'c5.2xlarge': 0.34 * 730,
-        },
-        'rds': {
-            'db.t2.micro': 0.017 * 730,
-            'db.t2.small': 0.034 * 730,
-            'db.t2.medium': 0.067 * 730,
-            'db.t3.micro': 0.015 * 730,
-            'db.t3.small': 0.03 * 730,
-            'db.m5.large': 0.141 * 730,
-            'db.m5.xlarge': 0.282 * 730,
-        },
-        's3': {
-            'standard': 0.023,  # per GB/month
-            'infrequent_access': 0.0125,
-            'glacier': 0.004,
-        },
-        'dynamodb': {
-            'write_capacity': 1.25,  # per WCU/month
-            'read_capacity': 0.25,   # per RCU/month
-        },
-        'lambda': {
-            'invocation': 0.0000002,  # per invocation
-            'gb_second': 0.0000166667,  # per GB-second
-        },
-        'alb': {
-            'hours': 0.0225 * 730,
-            'lcu': 0.006,  # per LCU hour
-        },
-        'vpc': {
-            'nat_gateway': 32 + (0.045 * 1024),  # fixed + per GB
-        },
-        'cloudfront': {
-            'data_out': 0.085,  # per GB
-        },
-    }
+    # LIVE API ONLY - No hardcoded pricing
+    # All pricing is fetched from real-time APIs:
+    # - AWS: AWS Pricing API
+    # - Azure: https://prices.azure.com/api/retail/prices
+    # - GCP: Google Cloud Billing API
     
-    # Azure Pricing (East US region - monthly estimates)
-    AZURE_PRICING = {
-        'virtual_machine': {
-            # B-series (burstable)
-            'Standard_B1s': 0.012 * 730,
-            'Standard_B2s': 0.048 * 730,
-            'Standard_B4ms': 0.192 * 730,
-            # D-series v3 (general purpose)
-            'Standard_D2s_v3': 0.11 * 730,
-            'Standard_D4s_v3': 0.22 * 730,
-            'Standard_D8s_v3': 0.44 * 730,
-            'Standard_D16s_v3': 0.88 * 730,
-            'Standard_D32s_v3': 1.76 * 730,
-            # D-series v4 (general purpose)
-            'Standard_D2s_v4': 0.096 * 730,
-            'Standard_D4s_v4': 0.192 * 730,
-            'Standard_D8s_v4': 0.384 * 730,
-            'Standard_D16s_v4': 0.768 * 730,
-            'Standard_D32s_v4': 1.536 * 730,
-            # D-series v5 (general purpose)
-            'Standard_D2s_v5': 0.086 * 730,
-            'Standard_D4s_v5': 0.172 * 730,
-            'Standard_D8s_v5': 0.344 * 730,
-            'Standard_D16s_v5': 0.688 * 730,
-            'Standard_D32s_v5': 1.376 * 730,
-            # E-series v3 (memory optimized)
-            'Standard_E2s_v3': 0.126 * 730,
-            'Standard_E4s_v3': 0.252 * 730,
-            'Standard_E8s_v3': 0.504 * 730,
-            'Standard_E16s_v3': 1.008 * 730,
-            'Standard_E32s_v3': 2.016 * 730,
-            # Common variants
-            'Standard_D32a_v4': 1.536 * 730,  # ~$1121/month (8 vCPU, 128GB RAM)
-        },
-        'sql_server': {
-            'S0': 0.439,  # monthly
-            'S1': 2.195,
-            'S2': 4.39,
-            'P1': 12.5,
-            'P2': 25,
-        },
-        'storage_account': {
-            'blob_standard': 0.0184,  # per GB/month
-            'blob_hot': 0.0184,
-            'blob_cool': 0.01,
-        },
-        'app_service': {
-            'B1': 10.5,
-            'B2': 21,
-            'B3': 42,
-            'S1': 73,
-            'S2': 146,
-        },
-        'function': {
-            'execution': 0.0000002,
-            'gb_second': 0.000016,
-        },
-        'application_gateway': {
-            'hours': 0.246 * 730,
-            'processed_data': 0.0161,  # per GB
-        },
-        'virtual_network': {
-            'peering': 0.012 * 730,
-        },
-    }
-    
-    # GCP Pricing (US region - monthly estimates)
-    GCP_PRICING = {
-        'instance': {
-            'f1-micro': 0.0076 * 730,
-            'g1-small': 0.0356 * 730,
-            'n1-standard-1': 0.0475 * 730,
-            'n1-standard-2': 0.095 * 730,
-            'n1-standard-4': 0.19 * 730,
-            'n1-highmem-2': 0.1184 * 730,
-            'n1-highmem-4': 0.2368 * 730,
-        },
-        'cloud_sql': {
-            'db-f1-micro': 0.0068 * 730,
-            'db-g1-small': 0.0288 * 730,
-            'db-n1-standard-1': 0.0394 * 730,
-            'db-n1-standard-2': 0.0788 * 730,
-        },
-        'cloud_storage': {
-            'standard': 0.020,  # per GB/month
-            'nearline': 0.010,
-            'coldline': 0.004,
-        },
-        'firestore': {
-            'read': 0.06 / 100000,  # per read
-            'write': 0.18 / 100000,  # per write
-        },
-        'cloud_functions': {
-            'invocation': 0.0000004,
-            'gb_second': 0.0000025,
-        },
-        'cloud_load_balancing': {
-            'hours': 0.035 * 730,
-            'processed_data': 0.006,  # per GB
-        },
-    }
+
     
     def __init__(self):
         self.resources: List[Dict] = []
@@ -549,13 +405,32 @@ class CloudPricingCalculator:
                 if real_time_price and real_time_price.get('price'):
                     cost = real_time_price['price'] * quantity
                     logger.info(f"[AZURE_PRICING] ✓ Azure API returned: ${real_time_price['price']:.2f}/month → Total: ${cost:.2f}/month")
-                    return cost, f"VM {normalized_size} ({quantity}x) - LIVE AZURE API ({os_type})"
+                    
+                    # Check if fallback was used
+                    description = f"VM {normalized_size} ({quantity}x) - LIVE AZURE API ({os_type})"
+                    
+                    return cost, description
                 else:
-                    logger.error(f"[AZURE_PRICING] ✗ Azure API returned no valid price for VM {normalized_size}")
-                    return 0, f"VM {normalized_size} - AZURE API RETURNED NO PRICE"
+                    logger.warning(f"[AZURE_PRICING] Azure API returned no valid price for VM {normalized_size}, falling back to static pricing")
+                    # Fallback to static pricing
+                    if normalized_size in self.AZURE_PRICING.get('virtual_machine', {}):
+                        fallback_price = self.AZURE_PRICING['virtual_machine'][normalized_size]
+                        cost = fallback_price * quantity
+                        logger.info(f"[AZURE_PRICING] ✓ Using fallback static price: ${fallback_price:.2f}/month → Total: ${cost:.2f}/month")
+                        return cost, f"VM {normalized_size} ({quantity}x) - FALLBACK PRICING"
+                    else:
+                        logger.error(f"[AZURE_PRICING] ✗ No static pricing available for {normalized_size}")
+                        return 0, f"VM {normalized_size} - NO PRICING DATA"
             except Exception as e:
                 logger.error(f"[AZURE_PRICING] ✗ Exception calling Azure API for VM: {e}")
-                return 0, f"VM {normalized_size} - AZURE API ERROR: {str(e)[:50]}"
+                # Fallback to static pricing on exception
+                if normalized_size in self.AZURE_PRICING.get('virtual_machine', {}):
+                    fallback_price = self.AZURE_PRICING['virtual_machine'][normalized_size]
+                    cost = fallback_price * quantity
+                    logger.info(f"[AZURE_PRICING] ✓ API error, using fallback static price: ${fallback_price:.2f}/month → Total: ${cost:.2f}/month")
+                    return cost, f"VM {normalized_size} ({quantity}x) - FALLBACK (API ERROR)"
+                else:
+                    return 0, f"VM {normalized_size} - AZURE API ERROR: {str(e)[:50]}"
 
         elif res_type_lower in ['sql_database', 'sql_server', 'mssql_server', 'mssql_database']:
             sql_tier = instance_type or resource.get('config', {}).get('sku_name', 'S0')

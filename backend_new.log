@@ -1,0 +1,12 @@
+INFO:real_time_pricing_fetcher:AWS Pricing API client initialized
+INFO:real_time_pricing_fetcher:Azure Pricing Fetcher initialized (using Azure Retail Prices API)
+INFO:azure_resource_validator:[VALIDATOR] Azure Resource Validator initialized - Cache DISABLED
+INFO:     Started server process [49512]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:infrapilot:\U0001f680 Ollama-Only Pipeline: Generating Terraform from prompt
+INFO:infrapilot:Step 1/2: Generating Terraform via Ollama...
+INFO:infrapilot:\U0001f680 Generating Terraform from prompt using Ollama: create 10 azure linux vm in storage account at central us region and on sub net ...
+INFO:infrapilot:\U0001f50d Detected OS type from prompt: linux (linux_count=1, windows_count=0)
+INFO:infrapilot:Calling Ollama with OS=linux, prompt length: 1786

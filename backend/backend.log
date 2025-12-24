@@ -1,7 +1,7 @@
-INFO:azure_resource_validator:[VALIDATOR] Azure Resource Validator initialized
+INFO:azure_resource_validator:[VALIDATOR] Azure Resource Validator initialized - Cache DISABLED
 INFO:real_time_pricing_fetcher:AWS Pricing API client initialized
 INFO:real_time_pricing_fetcher:Azure Pricing Fetcher initialized (using Azure Retail Prices API)
-INFO:     Started server process [28808]
+INFO:     Started server process [26632]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
