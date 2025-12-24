@@ -7,7 +7,7 @@ interface DiagramViewProps {
 }
 
 export default function DiagramView({ result, loading }: DiagramViewProps) {
-  const [diagramType, setDiagramType] = useState<"ascii" | "mermaid" | "lucidchart" | "json" | "svg" | "png" | "html">("lucidchart");
+  const [diagramType, setDiagramType] = useState<"ascii" | "mermaid" | "lucidchart" | "json" | "svg" | "png" | "html" | "drawio">("lucidchart");
   const [diagramContent, setDiagramContent] = useState<string | null>(null);
   const [diagramLoading, setDiagramLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -110,6 +110,8 @@ export default function DiagramView({ result, loading }: DiagramViewProps) {
       mimeType = "text/html";
     } else if (diagramType === "json") {
       mimeType = "application/json";
+    } else if (diagramType === "drawio") {
+      mimeType = "application/xml";
     }
 
     const element = document.createElement("a");
@@ -131,6 +133,8 @@ export default function DiagramView({ result, loading }: DiagramViewProps) {
         return "html";
       case "json":
         return "json";
+      case "drawio":
+        return "drawio";
       case "mermaid":
         return "md";
       case "lucidchart":
@@ -159,7 +163,7 @@ export default function DiagramView({ result, loading }: DiagramViewProps) {
       {/* Diagram Type Selector */}
       <div className="flex gap-2 flex-wrap">
         <label className="text-sm text-gray-400">Diagram Type:</label>
-        {(["svg", "html", "png", "ascii", "mermaid", "lucidchart", "json"] as const).map((type) => (
+        {(["svg", "html", "png", "ascii", "mermaid", "lucidchart", "json", "drawio"] as const).map((type) => (
           <button
             key={type}
             onClick={() => setDiagramType(type)}
@@ -176,6 +180,8 @@ export default function DiagramView({ result, loading }: DiagramViewProps) {
                 ? "Interactive diagram with canvas"
                 : type === "png"
                 ? "Raster image format"
+                : type === "drawio"
+                ? "Draw.io XML format for diagrams.net"
                 : ""
             }
           >
@@ -183,6 +189,7 @@ export default function DiagramView({ result, loading }: DiagramViewProps) {
             {type === "svg" && " 📊"}
             {type === "html" && " 🎨"}
             {type === "png" && " 🖼️"}
+            {type === "drawio" && " 📐"}
           </button>
         ))}
       </div>

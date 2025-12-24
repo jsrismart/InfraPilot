@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from diagram_generator import TerraformParser, DiagramGenerator
 from diagram_image_generator import AdvancedDiagramGenerator, generate_all_diagram_formats
+from drawio_generator import generate_drawio_from_terraform
 import json
 
 router = APIRouter()
@@ -13,7 +14,7 @@ router = APIRouter()
 class DiagramRequest(BaseModel):
     """Request model for diagram generation"""
     terraform_code: str
-    diagram_type: str = "ascii"  # ascii, mermaid, lucidchart, json, svg, png, html
+    diagram_type: str = "ascii"  # ascii, mermaid, lucidchart, json, svg, png, html, drawio
 
 class DiagramResponse(BaseModel):
     """Response model for diagram generation"""
@@ -38,10 +39,10 @@ def generate_diagram(request: DiagramRequest) -> DiagramResponse:
     if not request.terraform_code or not request.terraform_code.strip():
         raise HTTPException(status_code=400, detail="Terraform code cannot be empty")
     
-    if request.diagram_type not in ["ascii", "mermaid", "lucidchart", "json", "svg", "png", "html"]:
+    if request.diagram_type not in ["ascii", "mermaid", "lucidchart", "json", "svg", "png", "html", "drawio"]:
         raise HTTPException(
             status_code=400, 
-            detail="Invalid diagram_type. Must be one of: ascii, mermaid, lucidchart, json, svg, png, html"
+            detail="Invalid diagram_type. Must be one of: ascii, mermaid, lucidchart, json, svg, png, html, drawio"
         )
     
     try:
@@ -78,6 +79,8 @@ def generate_diagram(request: DiagramRequest) -> DiagramResponse:
         elif request.diagram_type == "html":
             advanced_generator = AdvancedDiagramGenerator(parser)
             content = advanced_generator.generate_html_diagram()
+        elif request.diagram_type == "drawio":
+            content = generate_drawio_from_terraform(request.terraform_code)
         
         return DiagramResponse(
             success=True,
@@ -142,6 +145,12 @@ def get_supported_formats() -> dict:
                 "description": "Interactive HTML diagram",
                 "best_for": "Detailed exploration, sharing with team",
                 "example": "Canvas-based interactive diagram with hover and click features"
+            },
+            {
+                "type": "drawio",
+                "description": "Draw.io (diagrams.net) XML format",
+                "best_for": "Import into draw.io or diagrams.net, professional diagrams",
+                "example": "XML format compatible with draw.io editor"
             }
         ]
     }
